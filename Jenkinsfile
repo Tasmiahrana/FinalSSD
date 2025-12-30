@@ -1,19 +1,16 @@
 pipeline {
     agent any
 
-    // Define environment variables for the pipeline
     environment {
-        // We deploy to a temporary folder for this assignment to avoid permission errors
-        DEPLOY_DIR = "/tmp/flask_app_deployment"
+        // Windows path for deployment (using backslashes)
+        DEPLOY_DIR = "C:\\tmp\\flask_app_deployment"
     }
 
     stages {
-        // --- STAGE 1: CLONE REPOSITORY ---
+        // --- STAGE 1: CLONE ---
         stage('Checkout Code') {
             steps {
-                echo 'Step 1: Cloning Repository from GitHub...'
-                // 'checkout scm' automatically uses the Git plugin to pull the repo 
-                // linked in the Jenkins Job configuration.
+                echo 'Step 1: Cloning Repository...'
                 checkout scm
             }
         }
@@ -22,14 +19,12 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo 'Step 2: Installing Python Dependencies...'
-                // specific secure design practice: Use a virtual environment (venv)
-                // so we don't pollute the Jenkins server's global python setup.
-                sh '''
-                    python3 -m venv venv
-                    . venv/bin/activate
+                // "bat" is for Windows. We also use "call" to activate the venv correctly.
+                bat '''
+                    python -m venv venv
+                    call venv\\Scripts\\activate
                     pip install --upgrade pip
                     pip install -r requirements.txt
-                    # Ensure pytest is installed for the next stage
                     pip install pytest
                 '''
             }
@@ -39,38 +34,32 @@ pipeline {
         stage('Run Unit Tests') {
             steps {
                 echo 'Step 3: Running Pytest...'
-                sh '''
-                    . venv/bin/activate
-                    # This runs all tests found in your repository
-                    pytest --verbose --junitxml=test-results.xml || true
+                bat '''
+                    call venv\\Scripts\\activate
+                    pytest --verbose --junitxml=test-results.xml
                 '''
             }
         }
 
-        // --- STAGE 4: BUILD THE APP ---
+        // --- STAGE 4: BUILD (Package) ---
         stage('Build Artifact') {
             steps {
                 echo 'Step 4: Packaging the App...'
-                // We create a compressed "tar" file of your app, excluding the git data and venv
-                sh 'tar -czf flask_app_v1.tar.gz --exclude=venv --exclude=.git --exclude=.github .'
+                // Windows supports tar in newer versions, or we can just echo for simplicity
+                bat 'tar -czf flask_app_v1.tar.gz --exclude=venv --exclude=.git .'
                 
-                // Save this file in Jenkins so you can download it later
                 archiveArtifacts artifacts: 'flask_app_v1.tar.gz', allowEmptyArchive: true
             }
         }
 
-        // --- STAGE 5: DEPLOY THE APP ---
+        // --- STAGE 5: DEPLOY ---
         stage('Deploy App') {
             steps {
                 echo "Step 5: Deploying to ${DEPLOY_DIR}..."
-                sh '''
-                    # Create the target directory
-                    mkdir -p $DEPLOY_DIR
-                    
-                    # Unzip the build file into the deployment folder
-                    tar -xzf flask_app_v1.tar.gz -C $DEPLOY_DIR
-                    
-                    echo "DEPLOYMENT SUCCESS: App is live at $DEPLOY_DIR"
+                bat '''
+                    if not exist "%DEPLOY_DIR%" mkdir "%DEPLOY_DIR%"
+                    tar -xzf flask_app_v1.tar.gz -C "%DEPLOY_DIR%"
+                    echo DEPLOYMENT SUCCESS
                 '''
             }
         }
